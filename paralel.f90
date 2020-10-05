@@ -35,7 +35,8 @@ program main
   use paralel_m, only: parll_t
   use coefun_m , only: ADI, write_tstep
   use point_m  , only: point_t, coefx_1, coefx_2, coefx_3, coefx_4, coefx_5, coefx_6, &
-  coefx_7, coefx_8, coefx_9, coefy_1, coefy_2, coefy_3, coefy_4, coefy_5, init_gamma
+  coefx_7, coefx_8, coefx_9, coefy_1, coefy_2, coefy_3, coefy_4, coefy_5, coefy_6,    &
+  coefy_7, init_gamma
   
   implicit none
   
@@ -51,6 +52,7 @@ program main
   real(DP), allocatable :: msl(:), mrl(:), msr(:), mrr(:), &
   msb(:), mrb(:), mst(:), mrt(:), soltransf(:), everyerror(:)
   
+  real(DP), allocatable :: ex_wtop_bd(:), ex_wbot_bd(:), ex_top_bd(:), ex_bot_bd(:)
   real(DP) :: tmperror, error
   ! Error for MPI
   integer :: ierr!, ROW_COMM, COL_COMM
@@ -58,7 +60,7 @@ program main
   integer :: status(MPI_STATUS_SIZE)
   
   ! Integer needed for indeces
-  integer :: i, j, k, l, t, meshsize, rowsize, colsize, proc, index
+  integer :: i, j, k, l, t, meshsize, rowsize, colsize, proc, index, tshow, ex_size
   ! Indeces for data treatment in proc0
   integer, allocatable :: i_str_p(:), i_end_p(:), &
   j_str_p(:), j_end_p(:)
@@ -81,7 +83,7 @@ program main
   
   call PL%read_parll()
   
-  if (PL%myproc == 0) allocate(solution(param%nx, param%ny, param%nt), &
+  if (PL%myproc == 0) allocate(solution(param%nx, param%ny, int(param%nt/param%show)+1), &
   everyerror(PL%nprocs))
   
  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -196,10 +198,10 @@ program main
   ! We impose simmetry
   if (PL%nrows /= 1) then
     PL%mybot = PL%myproc - PL%ncols
-    if (PL%mybot < 0) PL%mybot = PL%nprocs - PL%myproc - 1
+    if (PL%mybot < 0) PL%mybot = MPI_PROC_NULL !PL%nprocs - PL%myproc - 1
     
     PL%mytop = PL%myproc + PL%ncols
-    if (PL%mytop >= PL%nprocs) PL%mytop = PL%ncols - mod(PL%myproc, PL%ncols) - 1
+    if (PL%mytop >= PL%nprocs) PL%mytop = MPI_PROC_NULL !PL%ncols - mod(PL%myproc, PL%ncols) - 1
   else 
     PL%mybot = MPI_PROC_NULL
     
@@ -214,6 +216,7 @@ program main
   allocate(field(0:PL%nx+1, 0:PL%ny+1))
   allocate(field0(0:PL%nx+1, 0:PL%ny+1))
   
+  ex_size = 0
   !print *, "Memory allocated in the ", PL%myproc, " processor!"
 
     field(0,0)%aT(:) = 0.0_DP
@@ -256,6 +259,7 @@ program main
       call init_gamma(field(i,j), param)
       !if (PL%myproc == 0) print *, i,j, field(i,j)%T, field(i,j)%F, field(i,j)%Z
       
+      if (associated(field(i,j)%setXc, coefy_6)) ex_size = ex_size + 1
       field(PL%nx + 1,j)%aT(:) = field(0,0)%aT(:)
       field(PL%nx + 1,j)%aF(:) = field(0,0)%aF(:)
       field(PL%nx + 1,j)%aZ(:) = field(0,0)%aZ(:)
@@ -278,6 +282,22 @@ program main
     field(0        ,PL%ny + 1)%aZ(:) = field(0,0)%aZ(:)
     field(PL%nx + 1,PL%ny + 1)%aZ(:) = field(0,0)%aZ(:)
   
+  allocate(ex_wtop_bd(ex_size), ex_wbot_bd(ex_size), ex_top_bd(ex_size), ex_bot_bd(ex_size))
+  do i = 1, PL%nx
+    do j = 1, PL%ny
+      if (associated(field(i,j)%setXc, coefy_6)) then
+        ex_wbot_bd(i) = (9.0_DP * field(i,j)%T - field(i,j-1)%T - 8.0_DP * field(i,j+1)%T) &
+         / (3.0_DP * param%hy)
+        ex_top_bd(i)  = (9.0_DP * field(i,j+1)%T - field(i,j+2)%T + 8.0_DP * field(i,j)%T) &
+         / (3.0_DP * param%hy)
+      else if (associated(field(i,j)%setXc, coefy_7)) then
+        ex_wtop_bd(i) = (9.0_DP * field(i,j)%T - field(i,j+1)%T + 8.0_DP * field(i,j-1)%T) &
+         / (3.0_DP * param%hy)
+        ex_bot_bd(i)  = (9.0_DP * field(i,j-1)%T - field(i,j-2)%T + 8.0_DP * field(i,j)%T) &
+         / (3.0_DP * param%hy)
+      end if
+    end do
+  end do
   field0 = field
 
   allocate(msl(3 * PL%ny), mrl(3 * PL%ny))
@@ -286,7 +306,7 @@ program main
   allocate(mst(3 * PL%nx), mrt(3 * PL%nx))
   
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!! Sending info to neightbours
+!! Sending info to neighbours
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   do i = 0,1
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -366,15 +386,15 @@ program main
         
       do j = 1, PL%nx
         field(j,PL%ny + 1)%T  = mrt(j)
-        if(PL%myrow == 0) field(j,PL%ny + 1)%T = mrt(PL%nx - j + 1)
+        if(PL%mytop == MPI_PROC_NULL) field(j,PL%ny + 1)%T = field(j,PL%ny)%T !mrt(PL%nx - j + 1)
         field(j,PL%ny + 1)%sT = field(j,PL%ny + 1)%T
 
         field(j,PL%ny + 1)%F  = mrt(j + PL%nx)
-        if(PL%myrow == 0) field(j,PL%ny + 1)%F = mrt(2 * PL%nx - j + 1)
+        if(PL%mytop == MPI_PROC_NULL) field(j,PL%ny + 1)%F = field(j,PL%ny)%F !mrt(2 * PL%nx - j + 1)
         field(j,PL%ny + 1)%sF = field(j,PL%ny + 1)%F
 
         field(j,PL%ny + 1)%Z  = mrt(j + 2 * PL%nx)
-        if(PL%myrow == 0) field(j,PL%ny + 1)%Z = mrt(3 * PL%nx - j + 1)
+        if(PL%mytop == MPI_PROC_NULL) field(j,PL%ny + 1)%Z = field(j,PL%ny)%Z !mrt(3 * PL%nx - j + 1)
         field(j,PL%ny + 1)%sZ = field(j,PL%ny + 1)%Z
 
       end do
@@ -397,21 +417,22 @@ program main
       PL%mybot, 3, MPI_COMM_WORLD, status, ierr)
       do j = 1, PL%nx
         field(j,0)%T  = mrb(j)
-        if(PL%myrow == PL%ncols - 1) field(j, 0)%T = mrb(PL%nx - j + 1)
+        if(PL%mybot == MPI_PROC_NULL) field(j,0)%T = field(j,1)%T !mrb(PL%nx - j + 1)
         field(j,0)%sT = field(j,0)%T
 
         field(j,0)%F  = mrb(j + PL%nx)
-        if(PL%myrow == PL%ncols - 1) field(j, 0)%F = mrb(2 * PL%nx - j + 1)
+        if(PL%mybot == MPI_PROC_NULL) field(j,0)%F = field(j,1)%F !mrb(2 * PL%nx - j + 1)
         field(j,0)%sF = field(j,0)%F
 
         field(j,0)%Z  = mrb(j + 2 * PL%nx)
-        if(PL%myrow == PL%ncols - 1) field(j, 0)%Z = mrb(3 * PL%nx - j + 1)
+        if(PL%mybot == MPI_PROC_NULL) field(j,0)%Z = field(j,1)%Z !mrb(3 * PL%nx - j + 1)
         field(j,0)%sZ = field(j,0)%Z
 
       end do
     end if
       
   end do
+  
   
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !! Sending info to proc 0
@@ -484,14 +505,17 @@ program main
     end do
   end if
 
-  if (PL%myproc == 0) call write_tstep(solution(:,:,t), param, 0)
+  if (PL%myproc == 0) call write_tstep(solution(:,:,1), param, 0)
   
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !! Main Loop
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   do t = 1, param%nt
-    
+
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ !! Seting coef and system solve
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     !print *, "Processor:", PL%myproc, param%nt, PL%nx, PL%ny, param%my1, param%my2
     do i = 1, PL%nx
       do j = 1, PL%ny
@@ -504,47 +528,17 @@ program main
         field(i,j)%sZ = field(i,j)%sZ + field0(i,j)%Z * param%txy
       end do
     end do
-    
+    ! if (PL%myproc == 1 ) then
+    ! open (555, file = "help.txt")
+    ! do i = 1, PL%nx
+    ! do j = 1, PL%ny
+    !   write(555, "(2I4, 6F14.8)") i, j, field(i,j)%aZ(:), field(i,j)%sZ
+    ! end do
+    ! end do
+    ! close(555)
+    ! end if
     !print *, "Coeficien functions done in the ", PL%myproc, " processor!"
-
-    !  if (PL%myproc == 0 ) then
-    !      open(102, file = "testing.txt", position = "append") 
-    !     ! if (associated(field(i,j)%setXc, coefx_1)) write(102,*) "1x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_2)) write(102,*) "2x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_3)) write(102,*) "3x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_4) )write(102,*) "4x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_5)) write(102,*) "5x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_6)) write(102,*) "6x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_7)) write(102,*) "7x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_8)) write(102,*) "8x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setXc, coefx_9)) write(102,*) "9x", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setYc, coefy_1)) write(102,*) "1y", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setYc, coefy_2)) write(102,*) "2y", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setYc, coefy_3)) write(102,*) "3y", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setYc, coefy_4)) write(102,*) "4y", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     ! if (associated(field(i,j)%setYc, coefy_5)) write(102,*) "5y", i + PL%istr - 1, &
-    !     ! j + PL%jstr - 1
-    !     do i = 0,PL%nx + 1
-    !     do j = 0,PL%ny + 1
-    !     write(102,"(2I4, 6ES20.8)") i, j, field(i,j)%aZ(:), field(i,j)%sZ
-    !     end do 
-    !     end do
-    !     close(102)
-    !    end if
-    ! stop
+    
     call ADI(field(0:PL%nx+1,0:PL%ny+1)%aT(1), field(0:PL%nx+1,0:PL%ny+1)%aT(2), field(0:PL%nx+1,0:PL%ny+1)%aT(3), &
     field(0:PL%nx+1,0:PL%ny+1)%aT(4), field(0:PL%nx+1,0:PL%ny+1)%aT(5), field(:,:)%sT, field(:,:)%T, &
     tmperror, 4, param%valpha)
@@ -564,8 +558,30 @@ program main
     error = max(tmperror, error)
     
     if(mod(t,param%show) == 0) print *, "Z System solved in the ", PL%myproc, " processor!, ", error
-    
-  do i = 0,1
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ !! Setting exchange boundaries
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  
+    do i = 1, PL%nx
+      do j = 1, PL%ny
+        if (associated(field(i,j)%setXc, coefy_6)) then
+          ex_wbot_bd(i) = (9.0_DP * field(i,j)%T - field(i,j-1)%T - 8.0_DP * field(i,j+1)%T) &
+          / (3.0_DP * param%hy)
+          ex_top_bd(i)  = (9.0_DP * field(i,j+1)%T - field(i,j+2)%T + 8.0_DP * field(i,j)%T) &
+          / (3.0_DP * param%hy) * 0.5_DP * param%a * param%a * param%bK * &
+          (param%my2 - param%my1) * param%hy
+        else if (associated(field(i,j)%setXc, coefy_7)) then
+          ex_wtop_bd(i) = (9.0_DP * field(i,j)%T - field(i,j+1)%T + 8.0_DP * field(i,j-1)%T) &
+          / (3.0_DP * param%hy)
+          ex_bot_bd(i)  = (9.0_DP * field(i,j-1)%T - field(i,j-2)%T + 8.0_DP * field(i,j)%T) &
+           / (3.0_DP * param%hy) * 0.5_DP * param%a * param%a * param%bK * &
+          (param%my2 - param%my1) * param%hy
+        end if
+      end do
+    end do
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ !! Sending info to neighbours
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
+    do i = 0,1
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
     
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -643,15 +659,15 @@ program main
         
       do j = 1, PL%nx
         field(j,PL%ny + 1)%T  = mrt(j)
-        if(PL%myrow == 0) field(j,PL%ny + 1)%T = mrt(PL%nx - j + 1)
+        if(PL%mytop == MPI_PROC_NULL) field(j,PL%ny + 1)%T = field(j,PL%ny)%T !mrt(PL%nx - j + 1)
         field(j,PL%ny + 1)%sT = field(j,PL%ny + 1)%T
 
         field(j,PL%ny + 1)%F  = mrt(j + PL%nx)
-        if(PL%myrow == 0) field(j,PL%ny + 1)%F = mrt(2 * PL%nx - j + 1)
+        if(PL%mytop == MPI_PROC_NULL) field(j,PL%ny + 1)%F = field(j,PL%ny)%F !mrt(2 * PL%nx - j + 1)
         field(j,PL%ny + 1)%sF = field(j,PL%ny + 1)%F
 
         field(j,PL%ny + 1)%Z  = mrt(j + 2 * PL%nx)
-        if(PL%myrow == 0) field(j,PL%ny + 1)%Z = mrt(3 * PL%nx - j + 1)
+        if(PL%mytop == MPI_PROC_NULL) field(j,PL%ny + 1)%Z = field(j,PL%ny)%Z !mrt(3 * PL%nx - j + 1)
         field(j,PL%ny + 1)%sZ = field(j,PL%ny + 1)%Z
 
       end do
@@ -674,27 +690,28 @@ program main
       PL%mybot, 3, MPI_COMM_WORLD, status, ierr)
       do j = 1, PL%nx
         field(j,0)%T  = mrb(j)
-        if(PL%myrow == PL%ncols - 1) field(j, 0)%T = mrb(PL%nx - j + 1)
+        if(PL%mybot == MPI_PROC_NULL) field(j,0)%T = field(j,1)%T !mrb(PL%nx - j + 1)
         field(j,0)%sT = field(j,0)%T
 
         field(j,0)%F  = mrb(j + PL%nx)
-        if(PL%myrow == PL%ncols - 1) field(j, 0)%F = mrb(2 * PL%nx - j + 1)
+        if(PL%mybot == MPI_PROC_NULL) field(j,0)%F = field(j,1)%F !mrb(2 * PL%nx - j + 1)
         field(j,0)%sF = field(j,0)%F
 
         field(j,0)%Z  = mrb(j + 2 * PL%nx)
-        if(PL%myrow == PL%ncols - 1) field(j, 0)%Z = mrb(3 * PL%nx - j + 1)
+        if(PL%mybot == MPI_PROC_NULL) field(j,0)%Z = field(j,1)%Z !mrb(3 * PL%nx - j + 1)
         field(j,0)%sZ = field(j,0)%Z
 
       end do
     end if
       
   end do
-    
-    !print *, "Info sent and recieved in the ", PL%myproc, " processor!"
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ !! Sending info to proc 0
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   
     
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
     
-    if (PL%myproc /= 0) then
+    if (PL%myproc /= 0 .and. mod(t, param%show) == 0) then
       !print *, "Processor ", PL%myproc, " is up to duty"
       do j = 1, PL%ny
         do i = 1, PL%nx
@@ -710,9 +727,10 @@ program main
       call MPI_SEND(soltransf, size(soltransf), MPI_DOUBLE_PRECISION, &
       0, 1000 + PL%myproc, MPI_COMM_WORLD, ierr)
       !print *, "Proc" , PL%myproc, "done sending info to main prco"
-    else 
+    else if (PL%myproc == 0 .and. mod(t, param%show) == 0) then
       !print *, "Processor 0 is up to duty"
       
+      tshow = int(t/param%show) + 1
       do i = 0, PL%nrows-1
         do j = 0, PL%ncols-1
           
@@ -727,9 +745,9 @@ program main
             do k = 1,rowsize
               do l = 1,colsize
                 
-                solution(k ,l, t)%T = field(k,l)%T
-                solution(k ,l, t)%F = field(k,l)%F
-                solution(k ,l, t)%Z = field(k,l)%Z
+                solution(k ,l, tshow)%T = field(k,l)%T
+                solution(k ,l, tshow)%F = field(k,l)%F
+                solution(k ,l, tshow)%Z = field(k,l)%Z
               end do
             end do
             
@@ -745,11 +763,11 @@ program main
               do k = 1,rowsize
                 index = (l - 1) * rowsize + k
                 
-                solution(k - 1 + i_str_p(proc),l - 1 + j_str_p(proc), t)%T = &
+                solution(k - 1 + i_str_p(proc),l - 1 + j_str_p(proc), tshow)%T = &
                 soltransf(               index)
-                solution(k - 1 + i_str_p(proc),l - 1 + j_str_p(proc), t)%F = &
+                solution(k - 1 + i_str_p(proc),l - 1 + j_str_p(proc), tshow)%F = &
                 soltransf(    meshsize + index)
-                solution(k - 1 + i_str_p(proc),l - 1 + j_str_p(proc), t)%Z = &
+                solution(k - 1 + i_str_p(proc),l - 1 + j_str_p(proc), tshow)%Z = &
                 soltransf(2 * meshsize + index)
               end do
             end do
@@ -760,11 +778,16 @@ program main
       end do
     end if
 
-    if (PL%myproc == 0 .and. mod(t,param%show) == 0) &
-      call write_tstep(solution(:,:,t), param, t)
+    if (PL%myproc == 0 .and. mod(t,param%show) == 0) then
+      print *, t 
+      tshow = int(t/param%show) + 1
+      call write_tstep(solution(:,:, tshow), param, tshow)
+      print *, "---------------------------------------------------------------"
+      print *, "---------------------------------------------------------------"
     
+    end if 
     field0 = field
-    if(mod(t,param%show) == 0)  print *, "---------------------------------------------------------------"
+    
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
     
   end do

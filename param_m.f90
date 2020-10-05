@@ -9,7 +9,7 @@ module param_m
   type, public :: param_t
     real(DP) :: m, q
     real(DP) :: LeF, LeZ
-    real(DP) :: gamma, beta
+    real(DP) :: gamma, beta, bK
     real(DP) :: alpha
     real(DP) :: xmax, ymax, a
     real(DP) :: hx, hy, ht
@@ -48,7 +48,7 @@ module param_m
       read(101,*)
       read(101,*) this%m, this%q
       read(101,*)
-      read(101,*) this%beta, this%gamma
+      read(101,*) this%beta, this%gamma, this%bK
       read(101,*)
       read(101,*) this%LeF, this%LeZ
       read(101,*)
@@ -62,7 +62,7 @@ module param_m
     this%hx = 2.0_DP * this%xmax / (this%nx)
     this%hy =          this%ymax / (this%ny)
     
-    this%ht = 10d-7!this%hx * this%hy * 0.00010_DP
+    this%ht = 10d-5!this%hx * this%hy * 0.00010_DP
 
     this%a2 = (1.0_DP/this%a)**2
     this%a4 = (1.0_DP/this%a)**4
