@@ -2,8 +2,8 @@ module paralel_m
 
   use type_m, only: DP
 
-  implicit none 
-  
+  implicit none
+
   type, public :: parll_t
     ! Number of processor and nuber of this processor
     integer :: nprocs, myproc
@@ -21,12 +21,12 @@ module paralel_m
     integer :: myleft, myright, mytop, mybot
     ! Size of the mesh in this processor
     integer :: nx, ny
-    contains
+  contains
 
     procedure :: read_parll
   end type parll_t
-  contains
-  
+contains
+
   subroutine read_parll(this)
 
     class(parll_t) :: this
@@ -34,5 +34,5 @@ module paralel_m
     !open(101, file = "dataparll", status = "old")
     !  read(101,*) this%nrows, this%ncols
     !close(101)
-    end subroutine
+  end subroutine
 end module paralel_m
