@@ -2,7 +2,6 @@ module interfaces_m
 
   use type_m, only: DP
   use param_m, only: param_t
-  use paralel_m, only: parll_t
 
   implicit none
 
@@ -15,4 +14,3 @@ module interfaces_m
   end interface
 
 end module interfaces_m
-

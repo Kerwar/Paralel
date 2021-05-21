@@ -2,7 +2,6 @@ module point_m
 
   use type_m, only: DP
   use param_m, only: param_t
-  use paralel_m, only: parll_t
   use interfaces_m, only: coef
 
   implicit none
@@ -28,7 +27,7 @@ module point_m
 
   abstract interface
     subroutine co(this, param)
-      import :: DP, param_t, point_t, parll_t
+      import :: DP, param_t, point_t
       class(point_t), intent(inout) :: this
       type(param_t), intent(in) :: param
     end subroutine
@@ -57,7 +56,7 @@ contains
   ! --------------------------------------------
   !                    ---->
   ! -------------------------------------------- my2 does not belong to the wall
-  !                --------------
+  !                --------------                mx1 and mx2 belong to the wall
   ! -------------------------------------------- my1 does not belongs to the wall
   !                    <----
   ! --------------------------------------------
@@ -115,7 +114,7 @@ contains
         this%v(1) = 0.0_DP
         this%v(2) = 0.0_DP
 
-        this%T = 1.0_DP
+        this%T = 0.0_DP
         this%F = 0.0_DP
         this%Z = 0.0_DP
       else if (nx == param%mx2) then
@@ -125,7 +124,7 @@ contains
         this%v(1) = 0.0_DP
         this%v(2) = 0.0_DP
 
-        this%T = 1.0_DP
+        this%T = 0.0_DP
         this%F = 0.0_DP
         this%Z = 0.0_DP
       else if (nx < param%mx1 .or. nx > param%mx2) then
@@ -145,7 +144,7 @@ contains
         this%v(1) = 0.0_DP
         this%v(2) = 0.0_DP
 
-        this%T = 1.0_DP
+        this%T = 0.0_DP
         this%F = 0.0_DP
         this%Z = 0.0_DP
       end if
@@ -294,7 +293,7 @@ contains
         this%v(3) = 0.0_DP
         this%v(4) = 0.0_DP
         ! Wall bot boundary
-              else if (ny == param%my1+1) then
+      else if (ny == param%my1 + 1) then
         this%setYc => coefy_12
 
         this%v(3) = 0.0_DP
@@ -311,7 +310,7 @@ contains
         this%v(3) = 0.0_DP
         this%v(4) = 0.0_DP
         ! Wall top boundary
-      else if (ny == param%my2-1) then
+      else if (ny == param%my2 - 1) then
         this%setYc => coefy_11
 
         this%v(3) = 0.0_DP
@@ -361,11 +360,9 @@ contains
 
     point%aT(5) = ap + param%yx*(point%gammaTx + point%gammaTx)
     point%aF(5) = ap + param%yx*(point%gammaFx + point%gammaFx) + &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%Z*param%hx*param%hy
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%Z*param%hx*param%hy
     point%aZ(5) = ap + param%yx*(point%gammaZx + point%gammaZx) - &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%F*param%hx*param%hy &
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%F*param%hx*param%hy &
                   + param%hx*param%hy
 
     point%sT = param%q*point%Z*param%hx*param%hy
@@ -406,16 +403,14 @@ contains
                   (3.0_DP*point%gammaTx + point%gammaTx)
     point%aF(5) = ap + param%yx* &
                   (3.0_DP*point%gammaFx + point%gammaFx) + &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%Z*param%hx*param%hy
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%Z*param%hx*param%hy
     point%aZ(5) = ap + param%yx* &
                   (3.0_DP*point%gammaZx + point%gammaZx) - &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%F*param%hx*param%hy &
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%F*param%hx*param%hy &
                   + param%hx*param%hy
 
     point%sT = param%q*point%Z*param%hx*param%hy
-    point%sF = 8.0_DP/3.0_DP*point%gammaFx*param%yx + param%hy*param%m*point%v(1)
+    point%sF = 8.0_DP/3.0_DP*point%gammaFx*param%yx + param%hy*param%m*uw
     point%sZ = 0.0_DP
   end subroutine coefx_2
 
@@ -447,11 +442,9 @@ contains
 
     point%aT(5) = ap + param%yx*(point%gammaTx)
     point%aF(5) = ap + param%yx*(point%gammaFx) + &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%Z*param%hx*param%hy
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%Z*param%hx*param%hy
     point%aZ(5) = ap + param%yx*(point%gammaZx) - &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%F*param%hx*param%hy &
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%F*param%hx*param%hy &
                   + param%hx*param%hy
 
     point%sT = param%q*point%Z*param%hx*param%hy
@@ -487,11 +480,9 @@ contains
 
     point%aT(5) = ap + param%yx*(point%gammaTx)
     point%aF(5) = ap + param%yx*(point%gammaFx) + &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%Z*param%hx*param%hy
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%Z*param%hx*param%hy
     point%aZ(5) = ap + param%yx*(point%gammaZx) - &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%F*param%hx*param%hy &
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%F*param%hx*param%hy &
                   + param%hx*param%hy
 
     point%sT = param%q*point%Z*param%hx*param%hy
@@ -532,12 +523,10 @@ contains
                   (3.0_DP*point%gammaTx + point%gammaTx)
     point%aF(5) = ap + param%yx* &
                   (3.0_DP*point%gammaFx + point%gammaFx) + &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%Z*param%hx*param%hy
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%Z*param%hx*param%hy
     point%aZ(5) = ap + param%yx* &
                   (3.0_DP*point%gammaZx + point%gammaZx) - &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%F*param%hx*param%hy &
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%F*param%hx*param%hy &
                   + param%hx*param%hy
 
     point%sT = param%q*point%Z*param%hx*param%hy
@@ -661,11 +650,9 @@ contains
 
     point%aT(5) = ap + param%yx*(point%gammaTx + point%gammaTx)
     point%aF(5) = ap + param%yx*(point%gammaFx + point%gammaFx) + &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%Z*param%hx*param%hy
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%Z*param%hx*param%hy
     point%aZ(5) = ap + param%yx*(point%gammaZx + point%gammaZx) - &
-                  param%beta**2*dexp(param%beta*(point%T - 1.0_DP)/ &
-                                     (1.0_DP + param%gamma*(point%T - 1.0_DP)))*point%F*param%hx*param%hy &
+                  reactionrateFtoZ(param%beta, param%gamma, point%T)*point%F*param%hx*param%hy &
                   + param%hx*param%hy
 
     point%sT = param%q*point%Z*param%hx*param%hy
@@ -940,11 +927,11 @@ contains
     point%aZ(5) = point%aZ(5) + ap - &
                   param%xy*(point%gammaZy)
 
-    point%sT = point%sT 
-    point%sF = point%sF 
-    point%sZ = point%sZ 
+    point%sT = point%sT
+    point%sF = point%sF
+    point%sZ = point%sZ
   end subroutine coefy_8
-  
+
   ! Bot Simmetry
   subroutine coefy_9(point, param)
     class(point_t), intent(inout) :: point
@@ -976,9 +963,9 @@ contains
     point%aZ(5) = point%aZ(5) + ap - &
                   param%xy*(point%gammaZy)
 
-    point%sT = point%sT 
-    point%sF = point%sF 
-    point%sZ = point%sZ 
+    point%sT = point%sT
+    point%sF = point%sF
+    point%sZ = point%sZ
   end subroutine coefy_9
 
   ! Interior of bot channel
@@ -1038,7 +1025,7 @@ contains
     point%sF = 0.0_DP
     point%sZ = 0.0_DP
   end subroutine coefy_11
-  
+
   ! Wall bot boundary
   subroutine coefy_12(point, param)
     class(point_t), intent(inout) :: point
@@ -1061,7 +1048,12 @@ contains
     point%sZ = 0.0_DP
   end subroutine coefy_12
 
+  real(DP) function reactionrateFtoZ(beta, gamma, T)
+    real(DP) ::beta, gamma, T
 
+    reactionrateFtoZ = beta**2*dexp(beta*(T - 1.0_DP)/ &
+                                    (1.0_DP + gamma*(T - 1.0_DP)))
+  end function reactionrateFtoZ
   ! Upwind function
   function upwind(v, sign)
     real(DP), intent(in) :: v
