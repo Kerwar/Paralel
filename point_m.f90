@@ -912,19 +912,19 @@ contains
 
     ap = param%m*param%hx*(upwind(vs, "-"))
 
-    point%aT(3) = 2.0_DP*as + param%xy*point%gammaTy
-    point%aF(3) = 2.0_DP*as + param%xy*point%gammaFy
-    point%aZ(3) = 2.0_DP*as + param%xy*point%gammaZy
+    point%aT(3) = 2.0_DP*as - param%xy*point%gammaTy
+    point%aF(3) = 2.0_DP*as - param%xy*point%gammaFy
+    point%aZ(3) = 2.0_DP*as - param%xy*point%gammaZy
 
     point%aT(4) = 0.0_DP
     point%aF(4) = 0.0_DP
     point%aZ(4) = 0.0_DP
 
-    point%aT(5) = point%aT(5) + ap - &
+    point%aT(5) = point%aT(5) + ap + &
                   param%xy*(point%gammaTy)
-    point%aF(5) = point%aF(5) + ap - &
+    point%aF(5) = point%aF(5) + ap + &
                   param%xy*(point%gammaFy)
-    point%aZ(5) = point%aZ(5) + ap - &
+    point%aZ(5) = point%aZ(5) + ap + &
                   param%xy*(point%gammaZy)
 
     point%sT = point%sT
@@ -946,26 +946,29 @@ contains
     as = 0.0_DP
     an = param%m*param%hx*upwind(vn, "-")
 
-    ap = -param%m*param%hx*(upwind(vn, "+"))
+    ap = -param%m*param%hx*upwind(vn, "+")
 
     point%aT(3) = as
     point%aF(3) = as
     point%aZ(3) = as
 
-    point%aT(4) = an + param%xy*point%gammaTy
-    point%aF(4) = an + param%xy*point%gammaFy
-    point%aZ(4) = an + param%xy*point%gammaZy
+    point%aT(4) = an - param%xy* &
+                  (point%gammaTy)
+    point%aF(4) = an - param%xy* &
+                  (point%gammaFy)
+    point%aZ(4) = an - param%xy* &
+                  (point%gammaZy)
 
-    point%aT(5) = point%aT(5) + ap - &
+    point%aT(5) = point%aT(5) + ap + &
                   param%xy*(point%gammaTy)
-    point%aF(5) = point%aF(5) + ap - &
+    point%aF(5) = point%aF(5) + ap + &
                   param%xy*(point%gammaFy)
-    point%aZ(5) = point%aZ(5) + ap - &
+    point%aZ(5) = point%aZ(5) + ap + &
                   param%xy*(point%gammaZy)
 
-    point%sT = point%sT
-    point%sF = point%sF
-    point%sZ = point%sZ
+    point%sT = point%sT + 0.0_DP
+    point%sF = point%sF + 0.0_DP
+    point%sZ = point%sZ + 0.0_DP
   end subroutine coefy_9
 
   ! Interior of bot channel

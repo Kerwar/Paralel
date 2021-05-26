@@ -183,48 +183,83 @@ contains
 
     nx = size(o_d, 1)
     ny = size(o_d, 2)
+
     x = 0.0_DP
     do i = 1, nx
       do j = 1, ny
 
-        id = (i - 1)*ny + j
+        id = (j - 1)*nx + i
         a(id) = s_d(i, j)
         b(id) = w_d(i, j)
         c(id) = o_d(i, j)
         d(id) = e_d(i, j)
         e(id) = n_d(i, j)
 
+        ! if (i == 69 .and. j == 45) then
+        !   S(id) = ind(i, j) - o_d(i, j)*sol(i, j)
+        !   print *, s(id)
+
+        ! !x(id) = sol(i, j)
+        ! if (j > 1) S(id) = S(id) - w_d(i, j)*sol(i, j - 1)
+        ! print *, s(id)
+        ! if (j < ny) S(id) = S(id) - e_d(i, j)*sol(i, j + 1)
+        ! print *, s(id)
+        ! if (i > 1) S(id) = S(id) - s_d(i, j)*sol(i - 1, j)
+        ! print *, s(id)
+        ! if (i < nx) S(id) = S(id) - n_d(i, j)*sol(i + 1, j)
+        !   print *, s(id)
+        !   stop
+        ! end if
         S(id) = ind(i, j) - o_d(i, j)*sol(i, j)
 
         !x(id) = sol(i, j)
-        if (j > 1) S(id) = S(id) - w_d(i, j)*sol(i, j - 1)
-        if (j < ny) S(id) = S(id) - e_d(i, j)*sol(i, j + 1)
-        if (i > 1) S(id) = S(id) - s_d(i, j)*sol(i - 1, j)
-        if (i < nx) S(id) = S(id) - n_d(i, j)*sol(i + 1, j)
+        if (i > 1) S(id) = S(id) - w_d(i, j)*sol(i - 1, j)
+        if (i < nx) S(id) = S(id) - e_d(i, j)*sol(i + 1, j)
+        if (j > 1) S(id) = S(id) - s_d(i, j)*sol(i, j - 1)
+        if (j < ny) S(id) = S(id) - n_d(i, j)*sol(i, j + 1)
       end do
     end do
     do k = 1, swps
 
       !if (k == 1) print *, a
       !if (k == 1) print *, c
+      do i = 1, nx
       do j = 1, ny
-        do i = 1, nx
-          id = (i - 1)*ny + j
-          x(id) = S(id)
-          if (j > 1) x(id) = x(id) - b(id)*x(id - 1)
-          if (j < ny) x(id) = x(id) - d(id)*x(id + 1)
-          if (i > 1) x(id) = x(id) - a(id)*x(id - ny)
-          if (i < nx) x(id) = x(id) - e(id)*x(id + ny)
-          x(id) = x(id)/c(id)
-        end do
+        id = (j - 1)*nx + i
+        ! if (i == 69 .and. j == 45) then
+        !   print *, "w e s n o"
+        !   print *, b(id), d(id), a(id), e(id), c(id)
+        !   print *, x(id-1), x(id+1), x(id-ny), x(id+ny), x(id), S(id)
+        !   x(id) = S(id)
+        !   print *, x(id)
+        !   if (j > 1) x(id) = x(id) - a(id)*x(id - ny)
+        !   print *, x(id)
+        !   if (j < ny) x(id) = x(id) - e(id)*x(id + ny)
+        !   print *, x(id)
+        !   if (i > 1) x(id) = x(id) - b(id)*x(id - 1)
+        !   print *, x(id)
+        !   if (i < nx) x(id) = x(id) - c(id)*x(id + 1)
+        !   print *, x(id)
+        !   x(id) = x(id)/c(id)
+        !   print *, x(id)
+        !   stop
+        ! end if
+        x(id) = S(id)
+        if (j > 1) x(id) = x(id) - a(id)*x(id - nx)
+        if (j < ny) x(id) = x(id) - e(id)*x(id + nx)
+        if (i > 1) x(id) = x(id) - b(id)*x(id - 1)
+        if (i < nx) x(id) = x(id) - d(id)*x(id + 1)
+        x(id) = x(id)/c(id)
+      end do
       end do
     end do
     error = norm2(x)
     do i = 1, nx
       do j = 1, ny
-        id = (i - 1)*ny + j
+        id = (j - 1)*nx + i
         sol(i, j) = sol(i, j) + x(id)
         !sol(i,j) = x((j-1)*nx + i)
+        if ((i == 1 .or. j == 1 .or. i == nx .or. j == ny) .and. x(id) /= 0.0) print *, i, j
       end do
     end do
   end subroutine gauss_seidel
@@ -270,14 +305,14 @@ contains
       do j = 1, param%ny
         if (j > param%my1 .and. j < param%my2) then
           if (i >= param%mx1 .and. i <= param%mx2) then
-            write (101, "(6ES20.8, I3)") (t - 1)*param%ht, (i - 0.5_DP)*param%hx - param%xmax, &
+            write (101, "(6ES22.12E3, I3)") (t - 1)*param%ht, (i - 0.5_DP)*param%hx - param%xmax, &
               (j - 0.5_DP)*param%hy, field(i, j)%T, field(i, j)%F, field(i, j)%Z, 2
           else
-            write (101, "(6ES20.8, I3)") (t - 1)*param%ht, (i - 0.5_DP)*param%hx - param%xmax, &
+            write (101, "(6ES22.12E3, I3)") (t - 1)*param%ht, (i - 0.5_DP)*param%hx - param%xmax, &
               (j - 0.5_DP)*param%hy, field(i, j)%T, field(i, j)%F, field(i, j)%Z, 3
           end if
         else
-          write (101, "(6ES20.8, I3)") (t - 1)*param%ht, (i - 0.5_DP)*param%hx - param%xmax, &
+          write (101, "(6ES22.12E3, I3)") (t - 1)*param%ht, (i - 0.5_DP)*param%hx - param%xmax, &
             (j - 0.5_DP)*param%hy, field(i, j)%T, field(i, j)%F, field(i, j)%Z, 1
         end if
 

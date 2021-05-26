@@ -52,7 +52,7 @@ program main
   ! Message Send/Recive Left/Riht/Bot/Top
   real(DP), allocatable :: everyerror(:)
 
-  real(DP), allocatable :: ex_wtop_bd(:), ex_wbot_bd(:), ex_top_bd(:), ex_bot_bd(:)
+  real(DP), allocatable :: d_north_inside_wall(:), d_south_inside_wall(:), d_north_outside_wall(:), d_south_outside_wall(:)
   real(DP) :: error, tmperror
   ! Error for MPI
   integer :: ierr!, ROW_COMM, COL_COMM
@@ -179,19 +179,20 @@ program main
   field(0, PL%ny + 1)%aZ(:) = field(0, 0)%aZ(:)
   field(PL%nx + 1, PL%ny + 1)%aZ(:) = field(0, 0)%aZ(:)
 
-  allocate (ex_wtop_bd(param%nx), ex_wbot_bd(param%nx), ex_top_bd(param%nx), ex_bot_bd(param%nx))
+  allocate (d_north_inside_wall(param%nx), d_south_inside_wall(param%nx), &
+            d_north_outside_wall(param%nx), d_south_outside_wall(param%nx))
   do i = 1, PL%nx
     do j = 1, PL%ny
-      if (associated(field(i, j)%setYc, coefy_6)) then
-        ex_wbot_bd(i) = (9.0_DP*field(i, j)%T - field(i, j - 1)%T - 8.0_DP*field(i, j + 1)%T) &
-                        /(3.0_DP*param%hy)/param%bK
-        ex_top_bd(i) = -(9.0_DP*field(i, j + 1)%T - field(i, j + 2)%T - 8.0_DP*field(i, j)%T) &
-                       /(3.0_DP*param%hy)*param%bK
-      else if (associated(field(i, j)%setYc, coefy_7)) then
-        ex_wtop_bd(i) = -(9.0_DP*field(i, j)%T - field(i, j + 1)%T - 8.0_DP*field(i, j - 1)%T) &
-                        /(3.0_DP*param%hy)/param%bK
-        ex_bot_bd(i) = (9.0_DP*field(i, j - 1)%T - field(i, j - 2)%T - 8.0_DP*field(i, j)%T) &
-                       /(3.0_DP*param%hy)*param%bK
+      if (associated(field(i, j)%setYc, coefy_6)) then ! my1
+        d_south_inside_wall(i) = (9.0_DP*field(i, j + 1)%T - field(i, j)%T - 8.0_DP*field(i, j + 2)%T) &
+                                 /(3.0_DP*param%hy)/param%bK
+        d_north_outside_wall(i) = -(9.0_DP*field(i, j)%T - field(i, j + 1)%T - 8.0_DP*field(i, j - 1)%T) &
+                                  /(3.0_DP*param%hy)*param%bK
+      else if (associated(field(i, j)%setYc, coefy_7)) then ! my2
+        d_north_inside_wall(i) = -(9.0_DP*field(i, j - 1)%T - field(i, j)%T - 8.0_DP*field(i, j - 2)%T) &
+                                 /(3.0_DP*param%hy)/param%bK
+        d_south_outside_wall(i) = (9.0_DP*field(i, j)%T - field(i, j - 1)%T - 8.0_DP*field(i, j + 1)%T) &
+                                  /(3.0_DP*param%hy)*param%bK
       end if
     end do
   end do
@@ -213,7 +214,6 @@ program main
   call PL%send_info_to_proc0(field, solution(:, :, 1))
 
   if (PL%myproc == 0) call write_tstep(solution(:, :, 1), param, 0)
-  call stopit(field(101, 86)%sT)
   tshow = 2
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -230,91 +230,90 @@ program main
       do j = 1, PL%ny
         if (.not. associated(field(i, j)%setXc)) print *, i, j
         call field(i, j)%setXc(param)
-        call stopit(field(101, 86)%sT)
         call field(i, j)%setYc(param)
+        ! if (i == 69 .and. j == 45) print *, "-", field(69,44)%T
 
-        call stopit(field(101, 86)%sT)
         field(i, j)%sT = field(i, j)%sT + field0(i, j)%T*param%txy
         field(i, j)%sF = field(i, j)%sF + field0(i, j)%F*param%txy
         field(i, j)%sZ = field(i, j)%sZ + field0(i, j)%Z*param%txy
 
-        if (associated(field(i, j)%setYc, coefy_6)) then
-          !field(i, j + 1)%sT = field(i, j)%sT - ex_wbot_bd(i)*param%hx*param%alpha*param%a2
-          !field(i, j)%sT = field(i, j)%sT + ex_top_bd(i)*param%hx*field(i, j)%gammaTy
-        else if (associated(field(i, j)%setYc, coefy_7)) then
-          !field(i, j)%sT = field(i, j)%sT - ex_bot_bd(i)*param%hx*field(i, j)%gammaTy
-          !field(i, j - 1)%sT = field(i, j)%sT + ex_wtop_bd(i)*param%hx*param%alpha*param%a2
-        else if (associated(field(i, j)%setYc, coefy_8)) then
-          field(i, j)%sT = field(i, j)%sT + param%m*param%hx*field(i, j)%v(4)*field(i, j + 1)%T
-          field(i, j)%sF = field(i, j)%sF + param%m*param%hx*field(i, j)%v(4)*field(i, j + 1)%F
-          field(i, j)%sZ = field(i, j)%sZ + param%m*param%hx*field(i, j)%v(4)*field(i, j + 1)%Z
-        else if (associated(field(i, j)%setYc, coefy_9)) then
-          field(i, j)%sT = field(i, j)%sT + param%m*param%hx*field(i, j)%v(3)*field(i, j - 1)%T
-          field(i, j)%sF = field(i, j)%sF + param%m*param%hx*field(i, j)%v(3)*field(i, j - 1)%F
-          field(i, j)%sZ = field(i, j)%sZ + param%m*param%hx*field(i, j)%v(3)*field(i, j - 1)%Z
+        if (associated(field(i, j)%setYc, coefy_6)) then !my1
+          field(i, j + 1)%sT = field(i, j + 1)%sT - d_north_outside_wall(i)*param%hx*param%alpha*param%a2
+          field(i, j)%sT = field(i, j)%sT + d_south_inside_wall(i)*param%hx*field(i, j)%gammaTy
+        else if (associated(field(i, j)%setYc, coefy_7)) then !my2
+          field(i, j)%sT = field(i, j)%sT - d_north_inside_wall(i)*param%hx*field(i, j)%gammaTy
+          field(i, j - 1)%sT = field(i, j - 1)%sT + d_south_outside_wall(i)*param%hx*param%alpha*param%a2
+          ! else if (associated(field(i, j)%setYc, coefy_8)) then
+          !   field(i, j)%sT = field(i, j)%sT + param%m*param%hx*field(i, j+1)%v(4)*field(i, j + 1)%T
+          !   field(i, j)%sF = field(i, j)%sF + param%m*param%hx*field(i, j+1)%v(4)*field(i, j + 1)%F
+          !   field(i, j)%sZ = field(i, j)%sZ + param%m*param%hx*field(i, j+1)%v(4)*field(i, j + 1)%Z
+          ! else if (associated(field(i, j)%setYc, coefy_9)) then
+          !   field(i, j)%sT = field(i, j)%sT - param%m*param%hx*field(i, j-1)%v(3)*field(i, j - 1)%T
+          !   field(i, j)%sF = field(i, j)%sF - param%m*param%hx*field(i, j-1)%v(3)*field(i, j - 1)%F
+          !   field(i, j)%sZ = field(i, j)%sZ - param%m*param%hx*field(i, j-1)%v(3)*field(i, j - 1)%Z
         end if
       end do
     end do
-    open (555, file="help.txt")
-    do i = param%mx1, param%mx2
-    do j = param%my1 + 1, param%my2 - 1
-      if (associated(field(i, j)%setyc, coefy_4)) then
-        write (555, "(2I4, 5F14.8, A1, F14.8)") i, j, field(i, j)%aT(:), "|", field(i, j)%sT
-      else if (associated(field(i, j)%setyc, coefy_12)) then
-        write (555, "(2I4, 5F14.8, A1, F14.8, A1)") i, j, field(i, j)%aT(:), "|", field(i, j)%sT, "-"
-      else if (associated(field(i, j)%setyc, coefy_11)) then
-        write (555, "(2I4, 5F14.8, A1, F14.8, A1)") i, j, field(i, j)%aT(:), "|", field(i, j)%sT, "+"
-      else
-        write (555, *) "Nany dafuck"
-      end if
-    end do
-    end do
-    close (555)
-    if (t == 2) stop
-    !if (PL%myproc == 1 ) then
 
-    !end if
     !print *, "Coeficien functions done in the ", PL%myproc, " processor!"
-    do i = 1, 5
+    do i = 1, 10
       call gauss_seidel(field(0:PL%nx + 1, 0:PL%ny + 1)%aT(1), field(0:PL%nx + 1, 0:PL%ny + 1)%aT(2), &
                         field(0:PL%nx + 1, 0:PL%ny + 1)%aT(3), field(0:PL%nx + 1, 0:PL%ny + 1)%aT(4), &
                         field(0:PL%nx + 1, 0:PL%ny + 1)%aT(5), field(:, :)%sT, field(:, :)%T, &
-                        tmperror, adi_swp, param%valpha)
+                        tmperror, 1, param%valpha)
       error = max(tmperror, 0.0_DP)
 
       call gauss_seidel(field(0:PL%nx + 1, 0:PL%ny + 1)%aF(1), field(0:PL%nx + 1, 0:PL%ny + 1)%aF(2), &
                         field(0:PL%nx + 1, 0:PL%ny + 1)%aF(3), field(0:PL%nx + 1, 0:PL%ny + 1)%aF(4), &
                         field(0:PL%nx + 1, 0:PL%ny + 1)%aF(5), field(:, :)%sF, field(:, :)%F, &
-                        tmperror, adi_swp, param%valpha)
+                        tmperror, 1, param%valpha)
       error = max(tmperror, error)
 
       call gauss_seidel(field(0:PL%nx + 1, 0:PL%ny + 1)%aZ(1), field(0:PL%nx + 1, 0:PL%ny + 1)%aZ(2), &
                         field(0:PL%nx + 1, 0:PL%ny + 1)%aZ(3), field(0:PL%nx + 1, 0:PL%ny + 1)%aZ(4), &
                         field(0:PL%nx + 1, 0:PL%ny + 1)%aZ(5), field(:, :)%sZ, field(:, :)%Z, &
-                        tmperror, adi_swp, param%valpha)
+                        tmperror, 1, param%valpha)
       error = max(tmperror, error)
 
       call PL%send_info_to_neighbours(field(:, :))
     end do
-
+    ! if (t == 2) then
+    !   call PL%send_info_to_proc0(field(:, :), solution(:, :, 1))
+    !   if (PL%myproc == 0) call write_tstep(solution(:, :, 1), param, 1)
+    !   open (555, file="help.txt")
+    !   do i = param%mx1, param%mx2
+    !     do j = param%my1, param%my2
+    !       write (555, "(2I4, 7F16.8)") i, j, field(i, j)%at(:), field(i, j)%st, field(i, j)%t
+    !     end do
+    !   end do
+    !   close (555)
+    !   stop
+    ! end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !! Setting exchange boundaries
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do i = 1, PL%nx
       do j = 1, PL%ny
-        if (associated(field(i, j)%setYc, coefy_6)) then
-          ex_wbot_bd(i) = -(9.0_DP*field(i, j)%T - field(i, j - 1)%T - 8.0_DP*field(i, j + 1)%T) &
-                          /(3.0_DP*param%hy)/param%bK
-          ex_top_bd(i) = (9.0_DP*field(i, j + 1)%T - field(i, j + 2)%T - 8.0_DP*field(i, j)%T) &
-                         /(3.0_DP*param%hy)*param%bK
-        else if (associated(field(i, j)%setYc, coefy_7)) then
-          ex_wtop_bd(i) = (9.0_DP*field(i, j)%T - field(i, j + 1)%T - 8.0_DP*field(i, j - 1)%T) &
-                          /(3.0_DP*param%hy)/param%bK
-          ex_bot_bd(i) = -(9.0_DP*field(i, j - 1)%T - field(i, j - 2)%T - 8.0_DP*field(i, j)%T) &
-                         /(3.0_DP*param%hy)*param%bK
+        if (associated(field(i, j)%setYc, coefy_6)) then ! my1
+          d_south_inside_wall(i) = (9.0_DP*field(i, j + 1)%T - field(i, j)%T - 8.0_DP*field(i, j + 2)%T) &
+                                   /(3.0_DP*param%hy)/param%bK
+          d_north_outside_wall(i) = -(9.0_DP*field(i, j)%T - field(i, j + 1)%T - 8.0_DP*field(i, j - 1)%T) &
+                                    /(3.0_DP*param%hy)*param%bK
+        else if (associated(field(i, j)%setYc, coefy_7)) then ! my2
+          d_north_inside_wall(i) = -(9.0_DP*field(i, j - 1)%T - field(i, j)%T - 8.0_DP*field(i, j - 2)%T) &
+                                   /(3.0_DP*param%hy)/param%bK
+          d_south_outside_wall(i) = (9.0_DP*field(i, j)%T - field(i, j - 1)%T - 8.0_DP*field(i, j + 1)%T) &
+                                    /(3.0_DP*param%hy)*param%bK
         end if
       end do
     end do
+    ! open(555, file = "help.txt")
+    ! do i = 1, param%nx
+    !   write(555, *) ex_wbot_bd(i), ex_wtop_bd(param%nx-i+1)
+
+    ! end do
+    ! close(555)
+    ! stop
     call PL%send_info_to_neighbours(field(:, :))
 
     call PL%send_errors(error)
@@ -345,6 +344,8 @@ contains
     if (a /= 0) then
       print *, "here"
       stop
+    else
+      print *, "not here"
     end if
   end subroutine stopit
 end program

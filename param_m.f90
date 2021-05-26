@@ -62,7 +62,7 @@ contains
     this%hx = 2.0_DP*this%xmax/(this%nx)
     this%hy = this%ymax/(this%ny)
 
-    this%ht = 10d-7!this%hx * this%hy * 0.00010_DP
+    this%ht = 10d-6!this%hx * this%hy * 0.00010_DP
 
     this%a2 = (1.0_DP/this%a)**2
     this%a4 = (1.0_DP/this%a)**4
