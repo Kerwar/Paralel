@@ -1,0 +1,17 @@
+nx  ny  nt
+201 101 1000000
+Xmax Ymax a
+10 1 10
+m q
+1.1 1.2
+beta gamma
+5 0.7 0.15
+Le_F Le_Z
+1 1
+Tol show
+10e-7 10000
+palpha valpha
+1 1
+t0_hot_sporrr+t x_hot_spot y_hot_spot radius_hot_spot
+10 -3 0.05 0.5
+
